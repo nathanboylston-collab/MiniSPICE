@@ -58,8 +58,22 @@ def test_cli_reports_malformed_netlist(tmp_path, capsys):
     assert "expects exactly 3 fields" in err
 
 
-def test_cli_reports_unsupported_component(tmp_path, capsys):
-    netlist = _write(tmp_path, "cap.cir", "Cap Circuit\nC1 a 0 1u\n")
+def test_cli_reports_unsupported_component(tmp_path, capsys, monkeypatch):
+    """Every current component type (R, C, L, V, I) implements stamp(),
+    so there's no netlist that triggers this path today -- but the
+    project's own roadmap (diodes, transistors, ...) means a future
+    component very plausibly will, the same way Capacitor/Inductor did
+    until recently. Monkeypatching solve() to raise NotImplementedError
+    exercises the CLI's handling of that case in isolation, regardless
+    of which components currently support stamping.
+    """
+    from minispice.solver import MNASolver
+
+    def _raise_not_implemented(self):
+        raise NotImplementedError
+
+    monkeypatch.setattr(MNASolver, "solve", _raise_not_implemented)
+    netlist = _write(tmp_path, "any.cir", "Any Circuit\nR1 a 0 1k\n")
 
     exit_code = main([str(netlist)])
 

@@ -1,5 +1,3 @@
-import pytest
-
 from minispice.components import (
     Capacitor,
     CurrentSource,
@@ -39,16 +37,5 @@ def test_current_source_attributes():
     assert i.current == 0.001
 
 
-@pytest.mark.parametrize(
-    "component",
-    [
-        Capacitor("C1", "n1", "0", 1.0),
-        Inductor("L1", "n1", "0", 1.0),
-    ],
-)
-def test_stamp_not_yet_implemented(component):
-    # Resistor.stamp(), VoltageSource.stamp(), and CurrentSource.stamp()
-    # are implemented (see tests/test_stamping.py); Capacitor and
-    # Inductor stamps are still placeholders.
-    with pytest.raises(NotImplementedError):
-        component.stamp(system=None)
+# Every component's stamp() is implemented at this point; see
+# tests/test_stamping.py for stamp()-level coverage of each one.

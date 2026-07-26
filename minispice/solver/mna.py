@@ -5,14 +5,12 @@ solved-result container (``MNASolution``), and the solver's public
 interface (``MNASolver``). ``MNASolver.build_system()`` assembles the
 system by stamping every component in a circuit; ``MNASolver.solve()``
 solves it with ``numpy.linalg.solve`` and returns an ``MNASolution``
-that exposes node voltages and source currents by *name* rather than by
+that exposes node voltages and branch currents by *name* rather than by
 ``MNASystem``'s internal matrix index. ``MNASystem`` supports the three
-stamps needed for simple resistive DC circuits: ``stamp_conductance``
-(resistors), ``stamp_voltage_source`` (independent voltage sources),
-and ``stamp_current_source`` (independent current sources).
-``Capacitor`` and ``Inductor`` don't implement ``stamp()`` yet, so
-``build_system()`` will raise ``NotImplementedError`` for circuits that
-contain one.
+stamps every currently-implemented component reduces to:
+``stamp_conductance`` (resistors, and capacitors at DC),
+``stamp_voltage_source`` (independent voltage sources, and inductors at
+DC), and ``stamp_current_source`` (independent current sources).
 
 Background: plain nodal analysis writes one KCL equation per node, with
 every branch current expressed as a function of node voltages (Ohm's
@@ -26,6 +24,15 @@ voltage constraint into an explicit equation (an extra matrix row) and
 its unknown current into an extra matrix column, wired into the KCL
 rows of the two nodes it touches. ``MNASystem`` reserves that space up
 front (see ``__init__``); ``stamp_voltage_source`` fills it in.
+
+MiniSPICE only solves the DC operating point (no transient/AC analysis
+yet), and reactive elements degenerate to something already on this
+list at DC: a capacitor's impedance is infinite as frequency -> 0, i.e.
+an open circuit (zero conductance -- see ``Capacitor.stamp()``); an
+inductor's impedance is zero, i.e. a plain wire, which is exactly what
+an ideal 0V voltage source enforces (see ``Inductor.stamp()``). Neither
+element needed a new kind of stamp -- see the module docstring for
+``minispice.components.passive`` for the reasoning in full.
 """
 
 from __future__ import annotations
@@ -36,6 +43,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from minispice.circuit import Circuit
+from minispice.components.passive import Inductor
 from minispice.components.sources import VoltageSource
 
 
@@ -45,12 +53,15 @@ class MNASystem:
     The unknown vector ``x`` is laid out as ``[node voltages | branch
     currents]``: the first ``circuit.num_nodes`` entries are node
     voltages (indexed via ``circuit.node_index()``), followed by one
-    entry per independent voltage source in the circuit, in the order
-    those sources appear in ``circuit.components``. Reserving that
-    space at construction time -- rather than growing the matrix as
-    sources are stamped -- means every stamp only ever *fills in*
-    entries of an already correctly-sized ``A``/``z``, regardless of
-    the order components are stamped in.
+    entry per element that needs an auxiliary branch-current unknown --
+    every independent voltage source, plus every inductor (which, at
+    DC, is stamped identically to a 0V voltage source; see
+    ``Inductor.stamp()``) -- in the order those elements appear in
+    ``circuit.components``. Reserving that space at construction time
+    -- rather than growing the matrix as elements are stamped -- means
+    every stamp only ever *fills in* entries of an already
+    correctly-sized ``A``/``z``, regardless of the order components are
+    stamped in.
 
     Attributes:
         circuit: The circuit this system was built for. Kept on the
@@ -59,7 +70,7 @@ class MNASystem:
             ``"out"``) into matrix *row/column indices* by calling
             back into ``circuit.node_index()``.
         size: Total number of unknowns: node voltages plus one branch
-            current per independent voltage source.
+            current per voltage source and per inductor.
         A: The (size x size) system matrix.
         z: The right-hand-side vector of length ``size``.
     """
@@ -67,14 +78,16 @@ class MNASystem:
     def __init__(self, circuit: Circuit) -> None:
         self.circuit = circuit
 
-        # Reserve one auxiliary row/column per voltage source, appended
-        # after all the node-voltage unknowns, in the order the sources
-        # appear in the circuit. Doing this scan up front means the
-        # matrix never needs to be resized mid-stamp.
+        # Reserve one auxiliary row/column per element that needs a
+        # branch-current unknown -- voltage sources and (at DC)
+        # inductors alike -- appended after all the node-voltage
+        # unknowns, in the order those elements appear in the circuit.
+        # Doing this scan up front means the matrix never needs to be
+        # resized mid-stamp.
         node_count = circuit.num_nodes
         self._branch_index: Dict[str, int] = {}
         for component in circuit.components:
-            if isinstance(component, VoltageSource):
+            if isinstance(component, (VoltageSource, Inductor)):
                 self._branch_index[component.name] = node_count + len(self._branch_index)
 
         self.size = node_count + len(self._branch_index)
@@ -82,18 +95,28 @@ class MNASystem:
         self.z = np.zeros(self.size)
 
     def branch_index(self, name: str) -> int:
-        """Row/column reserved for a named voltage source's branch current.
+        """Row/column reserved for a named element's branch current.
 
-        Raises ``KeyError`` if ``name`` doesn't refer to a voltage
-        source that was present in the circuit when this system was
-        constructed.
+        Applies to any voltage source or inductor. Raises ``KeyError``
+        if ``name`` doesn't refer to one that was present in the
+        circuit when this system was constructed.
         """
         return self._branch_index[name]
 
     @property
     def voltage_source_names(self) -> List[str]:
         """Names of every voltage source with a reserved branch row, in index order."""
-        return list(self._branch_index.keys())
+        return [c.name for c in self.circuit.components if isinstance(c, VoltageSource)]
+
+    @property
+    def inductor_names(self) -> List[str]:
+        """Names of every inductor with a reserved DC branch row, in index order.
+
+        At DC, an inductor needs an auxiliary branch-current unknown
+        for the same reason a voltage source does -- see
+        ``Inductor.stamp()`` and ``stamp_voltage_source``.
+        """
+        return [c.name for c in self.circuit.components if isinstance(c, Inductor)]
 
     def _unknown_index(self, node: str) -> Optional[int]:
         """Translate a node name into a matrix row/column, or ``None``.
@@ -146,6 +169,11 @@ class MNASystem:
         self, node_pos: str, node_neg: str, name: str, voltage: float
     ) -> None:
         """Add an ideal voltage source's contribution to the MNA system.
+
+        Also used, with ``voltage=0.0``, by ``Inductor.stamp()``: at DC
+        an inductor is a plain wire, which is exactly what a 0V ideal
+        source enforces (``V_pos == V_neg``) -- see the module
+        docstring and ``Inductor.stamp()`` for the full reasoning.
 
         An ideal source can't be stamped with a conductance -- its
         current isn't a function of its own terminal voltages -- so
@@ -237,13 +265,20 @@ class MNASolution:
             defined flowing from ``node_pos`` to ``node_neg`` through
             the source (see ``VoltageSource`` /
             ``MNASystem.stamp_voltage_source``).
+        inductor_currents: The DC current through every inductor, keyed
+            by name, using the same ``node_pos -> node_neg`` sign
+            convention. An inductor is not a source, so it gets its own
+            dict rather than being folded into ``source_currents`` --
+            but under the hood it shares the same kind of matrix
+            row/column (see ``Inductor.stamp()``).
         raw: The raw solution vector, in ``MNASystem``'s index layout --
-            kept for advanced use; ``node_voltages``/``source_currents``
-            cover ordinary usage.
+            kept for advanced use; the named dicts above cover ordinary
+            usage.
     """
 
     node_voltages: Dict[str, float]
     source_currents: Dict[str, float]
+    inductor_currents: Dict[str, float]
     raw: np.ndarray
 
     def voltage(self, node: str) -> float:
@@ -270,19 +305,12 @@ class MNASolver:
         """Assemble the MNA system by stamping every component in turn.
 
         Creates an ``MNASystem`` sized for the circuit's nodes and
-        voltage sources (see ``MNASystem.__init__``), then asks each
-        component to add its own contribution via ``stamp()``, in the
-        order the components appear in ``circuit.components``. Stamp
-        order doesn't matter for correctness -- every stamp only adds
-        (``+=``/``-=``) to matrix entries, so the result is the same
-        regardless of which component is stamped first.
-
-        Components whose ``stamp()`` is not yet implemented (currently
-        ``Capacitor`` and ``Inductor``) raise ``NotImplementedError``
-        from within ``stamp()`` itself; this method makes no attempt to
-        catch or work around that; it simply propagates, since a
-        circuit containing an unstamped component genuinely can't be
-        assembled yet.
+        branch-current unknowns (see ``MNASystem.__init__``), then asks
+        each component to add its own contribution via ``stamp()``, in
+        the order the components appear in ``circuit.components``.
+        Stamp order doesn't matter for correctness -- every stamp only
+        adds (``+=``/``-=``) to matrix entries, so the result is the
+        same regardless of which component is stamped first.
         """
         system = MNASystem(self.circuit)
         for component in self.circuit.components:
@@ -296,9 +324,10 @@ class MNASolver:
         linear system ``A x = z`` for ``x`` using ``numpy.linalg.solve``
         -- the raw ``x`` is laid out as described in ``MNASystem``: node
         voltages first (in ``Circuit.node_index()`` order), followed by
-        one branch current per voltage source. That raw vector is then
-        unpacked into an ``MNASolution`` keyed by node/source name, so
-        callers don't need to know anything about the index layout.
+        one branch current per voltage source and per inductor. That
+        raw vector is then unpacked into an ``MNASolution`` keyed by
+        node/element name, so callers don't need to know anything about
+        the index layout.
 
         Raises ``numpy.linalg.LinAlgError`` if ``A`` is singular -- e.g.
         a node with no DC path to ground, or a circuit with no voltage
@@ -314,4 +343,12 @@ class MNASolver:
         source_currents = {
             name: float(x[system.branch_index(name)]) for name in system.voltage_source_names
         }
-        return MNASolution(node_voltages=node_voltages, source_currents=source_currents, raw=x)
+        inductor_currents = {
+            name: float(x[system.branch_index(name)]) for name in system.inductor_names
+        }
+        return MNASolution(
+            node_voltages=node_voltages,
+            source_currents=source_currents,
+            inductor_currents=inductor_currents,
+            raw=x,
+        )

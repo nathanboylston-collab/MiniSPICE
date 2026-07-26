@@ -1,18 +1,16 @@
-"""Tests for Resistor/VoltageSource/CurrentSource stamp() and the
-MNASystem stamps they use (stamp_conductance, stamp_voltage_source,
-stamp_current_source).
+"""Tests for every component's stamp() and the MNASystem stamps they
+use (stamp_conductance, stamp_voltage_source, stamp_current_source).
 
 These exercise the matrix-assembly logic directly (constructing an
 MNASystem and calling stamp() by hand) rather than through the solver,
-since MNASolver.build_system()/solve() are still unimplemented
-placeholders.
+to isolate each component's contribution from the rest of the pipeline.
 """
 
 import numpy as np
 import pytest
 
 from minispice.circuit import Circuit
-from minispice.components import CurrentSource, Resistor, VoltageSource
+from minispice.components import Capacitor, CurrentSource, Inductor, Resistor, VoltageSource
 from minispice.solver.mna import MNASystem
 
 
@@ -258,3 +256,129 @@ def test_current_source_into_resistor_matches_ohms_law():
     solution = np.linalg.solve(system.A, system.z)
     a = circuit.node_index("a")
     assert solution[a] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Capacitor.stamp() -- DC open circuit (reuses stamp_conductance with g=0)
+# ---------------------------------------------------------------------------
+
+
+def test_capacitor_stamp_leaves_matrix_untouched():
+    circuit = Circuit()
+    c1 = Capacitor("C1", "a", "b", 1e-6)
+    circuit.add_component(c1)
+    system = MNASystem(circuit)
+
+    c1.stamp(system)
+
+    assert system.A == pytest.approx(np.zeros((2, 2)))
+    assert system.z == pytest.approx(np.zeros(2))
+
+
+def test_capacitor_stamp_reserves_no_branch_row():
+    """Unlike a voltage source or inductor, a capacitor needs no
+    auxiliary unknown -- it never appears in a KCL equation at DC.
+    """
+    circuit = Circuit()
+    circuit.add_component(Capacitor("C1", "a", "0", 1e-6))
+
+    system = MNASystem(circuit)
+
+    assert system.size == circuit.num_nodes == 1
+
+
+def test_capacitor_alongside_resistor_only_the_resistor_contributes():
+    circuit = Circuit()
+    r1 = Resistor("R1", "a", "b", 1000.0)
+    c1 = Capacitor("C1", "a", "b", 1e-6)
+    circuit.add_component(r1)
+    circuit.add_component(c1)
+    system = MNASystem(circuit)
+
+    r1.stamp(system)
+    c1.stamp(system)
+
+    g = 1.0 / 1000.0
+    a, b = circuit.node_index("a"), circuit.node_index("b")
+    assert system.A[a, a] == pytest.approx(g)
+    assert system.A[b, b] == pytest.approx(g)
+    assert system.A[a, b] == pytest.approx(-g)
+    assert system.A[b, a] == pytest.approx(-g)
+
+
+# ---------------------------------------------------------------------------
+# Inductor.stamp() -- DC short circuit (reuses stamp_voltage_source with V=0)
+# ---------------------------------------------------------------------------
+
+
+def test_inductor_reserves_a_branch_row_like_a_voltage_source():
+    circuit = Circuit()
+    circuit.add_component(Inductor("L1", "a", "0", 1e-3))
+
+    system = MNASystem(circuit)
+
+    # 1 node ("a") + 1 branch current, same as VoltageSource would reserve.
+    assert system.size == 2
+    assert system.branch_index("L1") == 1
+    assert system.inductor_names == ["L1"]
+    assert system.voltage_source_names == []
+
+
+def test_inductor_stamp_matches_a_zero_volt_voltage_source():
+    """Stamping an inductor should produce exactly the same matrix a 0V
+    VoltageSource between the same two nodes would produce.
+    """
+    inductor_circuit = Circuit()
+    l1 = Inductor("L1", "a", "b", 1e-3)
+    inductor_circuit.add_component(l1)
+    inductor_system = MNASystem(inductor_circuit)
+    l1.stamp(inductor_system)
+
+    source_circuit = Circuit()
+    v1 = VoltageSource("V1", "a", "b", 0.0)
+    source_circuit.add_component(v1)
+    source_system = MNASystem(source_circuit)
+    v1.stamp(source_system)
+
+    assert inductor_system.A == pytest.approx(source_system.A)
+    assert inductor_system.z == pytest.approx(source_system.z)
+
+
+def test_inductor_to_ground_forces_node_voltage_to_zero():
+    circuit = Circuit()
+    l1 = Inductor("L1", "a", "0", 1e-3)
+    circuit.add_component(l1)
+    system = MNASystem(circuit)
+
+    l1.stamp(system)
+
+    a = circuit.node_index("a")
+    branch = system.branch_index("L1")
+    solution = np.linalg.solve(system.A, system.z)
+    assert solution[a] == pytest.approx(0.0)
+
+
+def test_inductor_in_series_forces_equal_node_voltages():
+    """V1 (5V) - L1 (a->b) - R1 (b->0): the inductor is a DC short, so
+    node b should end up at exactly the same voltage as node a (5V).
+    """
+    circuit = Circuit(title="RL at DC")
+    v1 = VoltageSource("V1", "a", "0", 5.0)
+    l1 = Inductor("L1", "a", "b", 1e-3)
+    r1 = Resistor("R1", "b", "0", 1000.0)
+    circuit.add_component(v1)
+    circuit.add_component(l1)
+    circuit.add_component(r1)
+
+    system = MNASystem(circuit)
+    for component in circuit.components:
+        component.stamp(system)
+
+    solution = np.linalg.solve(system.A, system.z)
+    a_idx, b_idx = circuit.node_index("a"), circuit.node_index("b")
+    assert solution[a_idx] == pytest.approx(5.0)
+    assert solution[b_idx] == pytest.approx(5.0)
+
+    # Same current flows through the inductor as through R1: 5V / 1k.
+    l1_branch = system.branch_index("L1")
+    assert solution[l1_branch] == pytest.approx(0.005)

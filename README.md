@@ -14,11 +14,13 @@ A minimal, educational SPICE-like circuit simulator written in Python.
   simulators work, rather than a full-featured replacement for ngspice.
 
 The parser and DC solver are functional for circuits built from
-resistors, independent voltage sources, and independent current
-sources. Capacitors and inductors parse fine but don't yet stamp into
-the MNA system (so a circuit containing one will report an error
-rather than a wrong answer); transient and AC analysis aren't
-implemented at all yet.
+resistors, capacitors, inductors, independent voltage sources, and
+independent current sources. Since MiniSPICE only solves the DC
+operating point (no transient/AC analysis yet), capacitors and
+inductors are stamped as their DC limiting cases -- an open circuit and
+a plain wire, respectively -- rather than using their actual
+capacitance/inductance value; those values only matter once
+transient/AC analysis exists.
 
 ## Project layout
 
@@ -68,9 +70,10 @@ Resistor Power Dissipation:
 
 Problems are reported as a short message on stderr (exit code 1)
 instead of a raw traceback: a missing file, a malformed netlist, a
-circuit using a component that isn't stamped yet (capacitors,
-inductors), or a circuit that can't be solved (e.g. a floating node
-with no path to ground).
+circuit using a component whose stamp isn't implemented (none of the
+current component types, but reserved for future devices like diodes),
+or a circuit that can't be solved (e.g. a floating node with no path to
+ground).
 
 ## Example netlist
 
@@ -108,11 +111,11 @@ pytest
 
 ## Roadmap
 
-- [x] Implement MNA matrix stamping for resistors, independent voltage
-      sources, and independent current sources
+- [x] Implement MNA matrix stamping for resistors, capacitors,
+      inductors, independent voltage sources, and independent current
+      sources (capacitors/inductors stamped as their DC limiting cases)
 - [x] DC operating point solve
 - [x] Command-line interface
-- [ ] Capacitor / inductor stamping
 - [ ] Transient analysis
 - [ ] AC small-signal analysis
 - [ ] Nonlinear devices (diodes, transistors)
