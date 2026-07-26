@@ -214,9 +214,9 @@ class MNASystem:
 class MNASolver:
     """Builds and solves the MNA system for a given circuit.
 
-    ``build_system()`` assembles the linear system; ``solve()`` is still
-    a placeholder for the actual DC operating-point solve (and later
-    transient/AC analyses).
+    ``build_system()`` assembles the linear system; ``solve()`` runs the
+    actual DC operating-point solve. (Transient/AC analyses are future
+    work, not covered by either method.)
     """
 
     def __init__(self, circuit: Circuit) -> None:
@@ -246,5 +246,16 @@ class MNASolver:
         return system
 
     def solve(self) -> np.ndarray:
-        """Solve the DC operating point and return the unknown vector."""
-        raise NotImplementedError("MNA solving is not implemented yet")
+        """Solve the DC operating point and return the unknown vector.
+
+        Assembles the system with ``build_system()`` and solves the
+        linear system ``A x = z`` for ``x`` using ``numpy.linalg.solve``.
+        ``x`` is laid out exactly as described in ``MNASystem``: node
+        voltages first (in ``Circuit.node_index()`` order), followed by
+        one branch current per voltage source. Raises
+        ``numpy.linalg.LinAlgError`` if ``A`` is singular -- e.g. a node
+        with no DC path to ground, or a circuit with no voltage
+        reference at all.
+        """
+        system = self.build_system()
+        return np.linalg.solve(system.A, system.z)

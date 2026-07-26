@@ -93,7 +93,43 @@ def test_build_system_raises_for_unimplemented_component():
         MNASolver(circuit).build_system()
 
 
-def test_solve_not_yet_implemented():
-    solver = MNASolver(Circuit())
-    with pytest.raises(NotImplementedError):
-        solver.solve()
+def test_solve_on_empty_circuit_returns_empty_array():
+    solution = MNASolver(Circuit()).solve()
+
+    assert solution.shape == (0,)
+
+
+def test_solve_voltage_divider_matches_expected_node_voltages():
+    circuit = Circuit(title="Voltage Divider")
+    circuit.add_component(VoltageSource("V1", "in", "0", 5.0))
+    circuit.add_component(Resistor("R1", "in", "out", 1000.0))
+    circuit.add_component(Resistor("R2", "out", "0", 1000.0))
+
+    solution = MNASolver(circuit).solve()
+
+    assert solution[circuit.node_index("in")] == pytest.approx(5.0)
+    assert solution[circuit.node_index("out")] == pytest.approx(2.5)
+
+
+def test_solve_current_source_into_resistor_matches_ohms_law():
+    circuit = Circuit()
+    circuit.add_component(CurrentSource("I1", "0", "a", 0.001))
+    circuit.add_component(Resistor("R1", "a", "0", 1000.0))
+
+    solution = MNASolver(circuit).solve()
+
+    assert solution[circuit.node_index("a")] == pytest.approx(1.0)
+
+
+def test_solve_raises_linalg_error_for_ungrounded_circuit():
+    """A resistor floating between two nodes with no ground reference
+    at all has infinitely many equally-valid solutions (only the
+    voltage *difference* is determined), which shows up as a singular
+    system matrix -- numpy.linalg.solve reports that as LinAlgError
+    rather than silently returning a wrong answer.
+    """
+    circuit = Circuit()
+    circuit.add_component(Resistor("R1", "a", "b", 1000.0))
+
+    with pytest.raises(np.linalg.LinAlgError):
+        MNASolver(circuit).solve()
