@@ -1,12 +1,15 @@
 """Modified Nodal Analysis (MNA) solver.
 
 This module defines the shape of the linear system (``MNASystem``) and
-the solver's public interface (``MNASolver``). Full circuit assembly
-and solving are not implemented yet -- ``MNASolver.build_system()`` and
-``MNASolver.solve()`` remain placeholders -- but ``MNASystem`` already
-supports the two stamps needed to solve simple resistive circuits with
-ideal DC sources: ``stamp_conductance`` (resistors) and
-``stamp_voltage_source`` (independent voltage sources).
+the solver's public interface (``MNASolver``). ``MNASolver.build_system()``
+assembles the system by stamping every component in a circuit;
+``MNASolver.solve()`` -- the actual linear-algebra solve -- is still a
+placeholder. ``MNASystem`` supports the three stamps needed for simple
+resistive DC circuits: ``stamp_conductance`` (resistors),
+``stamp_voltage_source`` (independent voltage sources), and
+``stamp_current_source`` (independent current sources). ``Capacitor``
+and ``Inductor`` don't implement ``stamp()`` yet, so ``build_system()``
+will raise ``NotImplementedError`` for circuits that contain one.
 
 Background: plain nodal analysis writes one KCL equation per node, with
 every branch current expressed as a function of node voltages (Ohm's
@@ -211,8 +214,8 @@ class MNASystem:
 class MNASolver:
     """Builds and solves the MNA system for a given circuit.
 
-    This is a placeholder: it establishes the interface future work will
-    fill in (component stamping, DC operating point solve, and later
+    ``build_system()`` assembles the linear system; ``solve()`` is still
+    a placeholder for the actual DC operating-point solve (and later
     transient/AC analyses).
     """
 
@@ -220,8 +223,27 @@ class MNASolver:
         self.circuit = circuit
 
     def build_system(self) -> MNASystem:
-        """Construct the (currently empty) MNA system for the circuit."""
-        raise NotImplementedError("MNA matrix stamping is not implemented yet")
+        """Assemble the MNA system by stamping every component in turn.
+
+        Creates an ``MNASystem`` sized for the circuit's nodes and
+        voltage sources (see ``MNASystem.__init__``), then asks each
+        component to add its own contribution via ``stamp()``, in the
+        order the components appear in ``circuit.components``. Stamp
+        order doesn't matter for correctness -- every stamp only adds
+        (``+=``/``-=``) to matrix entries, so the result is the same
+        regardless of which component is stamped first.
+
+        Components whose ``stamp()`` is not yet implemented (currently
+        ``Capacitor`` and ``Inductor``) raise ``NotImplementedError``
+        from within ``stamp()`` itself; this method makes no attempt to
+        catch or work around that; it simply propagates, since a
+        circuit containing an unstamped component genuinely can't be
+        assembled yet.
+        """
+        system = MNASystem(self.circuit)
+        for component in self.circuit.components:
+            component.stamp(system)
+        return system
 
     def solve(self) -> np.ndarray:
         """Solve the DC operating point and return the unknown vector."""
