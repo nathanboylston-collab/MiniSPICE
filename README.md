@@ -13,9 +13,12 @@ A minimal, educational SPICE-like circuit simulator written in Python.
 - Stay small and readable enough to serve as a reference for how circuit
   simulators work, rather than a full-featured replacement for ngspice.
 
-This project is in early architectural stages: the component models and
-parser are functional, while the MNA solver currently only defines its
-interface (matrix stamping and solving are not implemented yet).
+The parser and DC solver are functional for circuits built from
+resistors, independent voltage sources, and independent current
+sources. Capacitors and inductors parse fine but don't yet stamp into
+the MNA system (so a circuit containing one will report an error
+rather than a wrong answer); transient and AC analysis aren't
+implemented at all yet.
 
 ## Project layout
 
@@ -24,9 +27,50 @@ minispice/
     components/     Component class hierarchy (Resistor, Capacitor, ...)
     parser/          SPICE-like netlist parser
     circuit.py       In-memory circuit/netlist representation
-    solver/          Modified Nodal Analysis solver (placeholder)
+    solver/
+        mna.py       MNASystem/MNASolution/MNASolver (matrix stamping + DC solve)
+        results.py   SimulationResult (engineering-notation formatting)
+    __main__.py      `python -m minispice <file>` CLI
 tests/               pytest test suite
 ```
+
+## Command-line usage
+
+Solve a netlist directly from the command line:
+
+```bash
+python -m minispice examples/divider.cir
+```
+
+This parses the file, solves its DC operating point, and prints
+progress messages followed by a readable summary:
+
+```
+Parsing netlist: examples/divider.cir
+Parsed circuit 'Voltage Divider': 3 component(s), 2 node(s)
+Solving DC operating point...
+
+Simulation Results: Voltage Divider
+
+Node Voltages:
+  0        0 V
+  in       5 V
+  out      2.5 V
+
+Resistor Currents:
+  R1       2.5 mA
+  R2       2.5 mA
+
+Resistor Power Dissipation:
+  R1       6.25 mW
+  R2       6.25 mW
+```
+
+Problems are reported as a short message on stderr (exit code 1)
+instead of a raw traceback: a missing file, a malformed netlist, a
+circuit using a component that isn't stamped yet (capacitors,
+inductors), or a circuit that can't be solved (e.g. a floating node
+with no path to ground).
 
 ## Example netlist
 
@@ -38,11 +82,19 @@ R2 out 0 1k
 .end
 ```
 
+Using the parser and solver directly from Python:
+
 ```python
 from minispice.parser import SpiceParser
+from minispice.solver import MNASolver, SimulationResult
 
 circuit = SpiceParser().parse_file("divider.cir")
-print(circuit)
+solution = MNASolver(circuit).solve()
+
+print(solution.node_voltages)       # {'0': 0.0, 'in': 5.0, 'out': 2.5}
+print(solution.source_currents)     # {'V1': -0.0025}
+
+SimulationResult(circuit=circuit, solution=solution).describe()
 ```
 
 ## Development
@@ -56,8 +108,11 @@ pytest
 
 ## Roadmap
 
-- [ ] Implement MNA matrix stamping for each component type
-- [ ] DC operating point solve
+- [x] Implement MNA matrix stamping for resistors, independent voltage
+      sources, and independent current sources
+- [x] DC operating point solve
+- [x] Command-line interface
+- [ ] Capacitor / inductor stamping
 - [ ] Transient analysis
 - [ ] AC small-signal analysis
 - [ ] Nonlinear devices (diodes, transistors)
