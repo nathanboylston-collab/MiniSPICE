@@ -33,6 +33,54 @@ class Circuit:
             self._register_node(node)
         self.components.append(component)
 
+    def list_components(self) -> List[Component]:
+        """Return all components in the circuit, in insertion order."""
+        return list(self.components)
+
+    def list_nodes(self) -> List[str]:
+        """Return all node names, ground first, in discovery order."""
+        return list(self._nodes.keys())
+
+    def components_at(self, node: str) -> List[Component]:
+        """Return every component with a terminal connected to ``node``."""
+        return [component for component in self.components if node in component.nodes]
+
+    def describe(self) -> str:
+        """Build (and print) a human-readable summary of the circuit.
+
+        The summary lists every component with its type, terminals, and
+        value, then every node with the components attached to it. It is
+        printed for interactive/CLI use and also returned as a string so
+        it can be inspected or logged without re-parsing stdout.
+        """
+        lines: List[str] = []
+
+        title = self.title or "(untitled)"
+        lines.append(f"Circuit: {title}")
+
+        lines.append(f"Components ({len(self.components)}):")
+        if self.components:
+            for component in self.components:
+                kind = type(component).__name__
+                node_list = ", ".join(component.nodes)
+                lines.append(
+                    f"  {component.name:<6} {kind:<14} nodes=({node_list})  value={component.value}"
+                )
+        else:
+            lines.append("  (none)")
+
+        node_names = self.list_nodes()
+        lines.append(f"Nodes ({self.num_nodes} + ground):")
+        for node in node_names:
+            label = f"{node} (ground)" if node == GROUND else node
+            attached = ", ".join(c.name for c in self.components_at(node))
+            attached = attached or "(unconnected)"
+            lines.append(f"  {label}: {attached}")
+
+        summary = "\n".join(lines)
+        print(summary)
+        return summary
+
     def node_index(self, node: str) -> int:
         """Index of a node within the MNA unknown vector.
 
