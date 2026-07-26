@@ -14,7 +14,11 @@ class VoltageSource(TwoTerminalComponent):
     """An independent DC voltage source, value given in volts.
 
     Voltage sources introduce an auxiliary branch current unknown in
-    Modified Nodal Analysis; that bookkeeping belongs to the solver.
+    Modified Nodal Analysis, since (unlike a resistor) the current
+    through an ideal source cannot be written as a function of its own
+    terminal voltages. ``MNASystem`` reserves a row/column for that
+    unknown for every voltage source in the circuit; ``stamp`` fills it
+    in via ``MNASystem.stamp_voltage_source``.
     """
 
     def __init__(self, name: str, node_pos: str, node_neg: str, voltage: float) -> None:
@@ -25,7 +29,7 @@ class VoltageSource(TwoTerminalComponent):
         return self.value
 
     def stamp(self, system: "MNASystem") -> None:
-        raise NotImplementedError
+        system.stamp_voltage_source(self.node_pos, self.node_neg, self.name, self.voltage)
 
 
 class CurrentSource(TwoTerminalComponent):
