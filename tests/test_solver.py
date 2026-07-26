@@ -93,10 +93,13 @@ def test_build_system_raises_for_unimplemented_component():
         MNASolver(circuit).build_system()
 
 
-def test_solve_on_empty_circuit_returns_empty_array():
+def test_solve_on_empty_circuit_returns_ground_only_solution():
     solution = MNASolver(Circuit()).solve()
 
-    assert solution.shape == (0,)
+    # Circuit always registers ground, even with zero components.
+    assert solution.node_voltages == {"0": 0.0}
+    assert solution.source_currents == {}
+    assert solution.raw.shape == (0,)
 
 
 def test_solve_voltage_divider_matches_expected_node_voltages():
@@ -107,8 +110,12 @@ def test_solve_voltage_divider_matches_expected_node_voltages():
 
     solution = MNASolver(circuit).solve()
 
-    assert solution[circuit.node_index("in")] == pytest.approx(5.0)
-    assert solution[circuit.node_index("out")] == pytest.approx(2.5)
+    assert solution.node_voltages["in"] == pytest.approx(5.0)
+    assert solution.node_voltages["out"] == pytest.approx(2.5)
+    assert solution.node_voltages["0"] == pytest.approx(0.0)
+    assert solution.source_currents["V1"] == pytest.approx(-0.0025)
+    assert solution.voltage("out") == pytest.approx(2.5)
+    assert solution.current("V1") == pytest.approx(-0.0025)
 
 
 def test_solve_current_source_into_resistor_matches_ohms_law():
@@ -118,7 +125,8 @@ def test_solve_current_source_into_resistor_matches_ohms_law():
 
     solution = MNASolver(circuit).solve()
 
-    assert solution[circuit.node_index("a")] == pytest.approx(1.0)
+    assert solution.node_voltages["a"] == pytest.approx(1.0)
+    assert solution.source_currents == {}
 
 
 def test_solve_raises_linalg_error_for_ungrounded_circuit():

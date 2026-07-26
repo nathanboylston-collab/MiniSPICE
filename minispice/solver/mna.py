@@ -1,15 +1,18 @@
 """Modified Nodal Analysis (MNA) solver.
 
-This module defines the shape of the linear system (``MNASystem``) and
-the solver's public interface (``MNASolver``). ``MNASolver.build_system()``
-assembles the system by stamping every component in a circuit;
-``MNASolver.solve()`` -- the actual linear-algebra solve -- is still a
-placeholder. ``MNASystem`` supports the three stamps needed for simple
-resistive DC circuits: ``stamp_conductance`` (resistors),
-``stamp_voltage_source`` (independent voltage sources), and
-``stamp_current_source`` (independent current sources). ``Capacitor``
-and ``Inductor`` don't implement ``stamp()`` yet, so ``build_system()``
-will raise ``NotImplementedError`` for circuits that contain one.
+This module defines the shape of the linear system (``MNASystem``), the
+solved-result container (``MNASolution``), and the solver's public
+interface (``MNASolver``). ``MNASolver.build_system()`` assembles the
+system by stamping every component in a circuit; ``MNASolver.solve()``
+solves it with ``numpy.linalg.solve`` and returns an ``MNASolution``
+that exposes node voltages and source currents by *name* rather than by
+``MNASystem``'s internal matrix index. ``MNASystem`` supports the three
+stamps needed for simple resistive DC circuits: ``stamp_conductance``
+(resistors), ``stamp_voltage_source`` (independent voltage sources),
+and ``stamp_current_source`` (independent current sources).
+``Capacitor`` and ``Inductor`` don't implement ``stamp()`` yet, so
+``build_system()`` will raise ``NotImplementedError`` for circuits that
+contain one.
 
 Background: plain nodal analysis writes one KCL equation per node, with
 every branch current expressed as a function of node voltages (Ohm's
@@ -27,7 +30,8 @@ front (see ``__init__``); ``stamp_voltage_source`` fills it in.
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -85,6 +89,11 @@ class MNASystem:
         constructed.
         """
         return self._branch_index[name]
+
+    @property
+    def voltage_source_names(self) -> List[str]:
+        """Names of every voltage source with a reserved branch row, in index order."""
+        return list(self._branch_index.keys())
 
     def _unknown_index(self, node: str) -> Optional[int]:
         """Translate a node name into a matrix row/column, or ``None``.
@@ -211,6 +220,41 @@ class MNASystem:
             self.z[idx_neg] += current
 
 
+@dataclass
+class MNASolution:
+    """The DC operating-point solution of a circuit.
+
+    Wraps the raw unknown vector produced by ``numpy.linalg.solve`` so
+    callers look results up by node/source *name* instead of needing to
+    know ``MNASystem``'s ``[node voltages | branch currents]`` index
+    layout.
+
+    Attributes:
+        node_voltages: Every node's DC voltage, keyed by name --
+            including ground, which is always ``0.0``.
+        source_currents: The DC current through every independent
+            voltage source, keyed by name. Sign convention: current is
+            defined flowing from ``node_pos`` to ``node_neg`` through
+            the source (see ``VoltageSource`` /
+            ``MNASystem.stamp_voltage_source``).
+        raw: The raw solution vector, in ``MNASystem``'s index layout --
+            kept for advanced use; ``node_voltages``/``source_currents``
+            cover ordinary usage.
+    """
+
+    node_voltages: Dict[str, float]
+    source_currents: Dict[str, float]
+    raw: np.ndarray
+
+    def voltage(self, node: str) -> float:
+        """Equivalent to ``node_voltages[node]``."""
+        return self.node_voltages[node]
+
+    def current(self, source_name: str) -> float:
+        """Equivalent to ``source_currents[source_name]``."""
+        return self.source_currents[source_name]
+
+
 class MNASolver:
     """Builds and solves the MNA system for a given circuit.
 
@@ -245,17 +289,29 @@ class MNASolver:
             component.stamp(system)
         return system
 
-    def solve(self) -> np.ndarray:
-        """Solve the DC operating point and return the unknown vector.
+    def solve(self) -> MNASolution:
+        """Solve the DC operating point and return a structured MNASolution.
 
         Assembles the system with ``build_system()`` and solves the
-        linear system ``A x = z`` for ``x`` using ``numpy.linalg.solve``.
-        ``x`` is laid out exactly as described in ``MNASystem``: node
+        linear system ``A x = z`` for ``x`` using ``numpy.linalg.solve``
+        -- the raw ``x`` is laid out as described in ``MNASystem``: node
         voltages first (in ``Circuit.node_index()`` order), followed by
-        one branch current per voltage source. Raises
-        ``numpy.linalg.LinAlgError`` if ``A`` is singular -- e.g. a node
-        with no DC path to ground, or a circuit with no voltage
+        one branch current per voltage source. That raw vector is then
+        unpacked into an ``MNASolution`` keyed by node/source name, so
+        callers don't need to know anything about the index layout.
+
+        Raises ``numpy.linalg.LinAlgError`` if ``A`` is singular -- e.g.
+        a node with no DC path to ground, or a circuit with no voltage
         reference at all.
         """
         system = self.build_system()
-        return np.linalg.solve(system.A, system.z)
+        x = np.linalg.solve(system.A, system.z)
+
+        node_voltages = {
+            node: 0.0 if self.circuit.node_index(node) < 0 else float(x[self.circuit.node_index(node)])
+            for node in self.circuit.list_nodes()
+        }
+        source_currents = {
+            name: float(x[system.branch_index(name)]) for name in system.voltage_source_names
+        }
+        return MNASolution(node_voltages=node_voltages, source_currents=source_currents, raw=x)
