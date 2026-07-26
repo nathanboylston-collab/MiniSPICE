@@ -42,7 +42,6 @@ def test_current_source_attributes():
 @pytest.mark.parametrize(
     "component",
     [
-        Resistor("R1", "n1", "0", 1.0),
         Capacitor("C1", "n1", "0", 1.0),
         Inductor("L1", "n1", "0", 1.0),
         VoltageSource("V1", "n1", "0", 1.0),
@@ -50,5 +49,7 @@ def test_current_source_attributes():
     ],
 )
 def test_stamp_not_yet_implemented(component):
+    # Resistor.stamp() is implemented (see tests/test_stamping.py);
+    # every other component's stamp() is still a placeholder.
     with pytest.raises(NotImplementedError):
         component.stamp(system=None)

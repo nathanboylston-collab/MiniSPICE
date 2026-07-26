@@ -21,7 +21,20 @@ class Resistor(TwoTerminalComponent):
         return self.value
 
     def stamp(self, system: "MNASystem") -> None:
-        raise NotImplementedError
+        """Add this resistor's conductance to the MNA system.
+
+        A resistor obeys Ohm's law: the current flowing from
+        ``node_pos`` to ``node_neg`` is ``g * (V_pos - V_neg)``, where
+        ``g = 1 / resistance`` is the conductance. That is exactly the
+        relationship ``MNASystem.stamp_conductance`` encodes, so the
+        resistor's only job is to compute ``g`` and hand its two node
+        *names* off to the system -- ``stamp_conductance`` (via
+        ``Circuit.node_index()``) is what figures out which row/column
+        of the matrix each name corresponds to, or skips a terminal
+        entirely if it is tied to ground.
+        """
+        conductance = 1.0 / self.resistance
+        system.stamp_conductance(self.node_pos, self.node_neg, conductance)
 
 
 class Capacitor(TwoTerminalComponent):
