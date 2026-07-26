@@ -1,0 +1,45 @@
+"""Independent voltage and current sources."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from .base import TwoTerminalComponent
+
+if TYPE_CHECKING:
+    from minispice.solver.mna import MNASystem
+
+
+class VoltageSource(TwoTerminalComponent):
+    """An independent DC voltage source, value given in volts.
+
+    Voltage sources introduce an auxiliary branch current unknown in
+    Modified Nodal Analysis; that bookkeeping belongs to the solver.
+    """
+
+    def __init__(self, name: str, node_pos: str, node_neg: str, voltage: float) -> None:
+        super().__init__(name, node_pos, node_neg, voltage)
+
+    @property
+    def voltage(self) -> float:
+        return self.value
+
+    def stamp(self, system: "MNASystem") -> None:
+        raise NotImplementedError
+
+
+class CurrentSource(TwoTerminalComponent):
+    """An independent DC current source, value given in amps.
+
+    Current flows from ``node_pos`` to ``node_neg`` through the source.
+    """
+
+    def __init__(self, name: str, node_pos: str, node_neg: str, current: float) -> None:
+        super().__init__(name, node_pos, node_neg, current)
+
+    @property
+    def current(self) -> float:
+        return self.value
+
+    def stamp(self, system: "MNASystem") -> None:
+        raise NotImplementedError
