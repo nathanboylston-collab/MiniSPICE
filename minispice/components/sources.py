@@ -36,6 +36,10 @@ class CurrentSource(TwoTerminalComponent):
     """An independent DC current source, value given in amps.
 
     Current flows from ``node_pos`` to ``node_neg`` through the source.
+    Unlike ``VoltageSource``, a current source's current is already
+    known, so it needs no auxiliary branch-current unknown -- ``stamp``
+    contributes only to the system's right-hand side, via
+    ``MNASystem.stamp_current_source``.
     """
 
     def __init__(self, name: str, node_pos: str, node_neg: str, current: float) -> None:
@@ -46,4 +50,4 @@ class CurrentSource(TwoTerminalComponent):
         return self.value
 
     def stamp(self, system: "MNASystem") -> None:
-        raise NotImplementedError
+        system.stamp_current_source(self.node_pos, self.node_neg, self.current)

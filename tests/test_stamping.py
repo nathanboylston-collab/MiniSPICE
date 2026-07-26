@@ -1,5 +1,6 @@
-"""Tests for Resistor.stamp()/VoltageSource.stamp() and the MNASystem
-stamps they use (stamp_conductance, stamp_voltage_source).
+"""Tests for Resistor/VoltageSource/CurrentSource stamp() and the
+MNASystem stamps they use (stamp_conductance, stamp_voltage_source,
+stamp_current_source).
 
 These exercise the matrix-assembly logic directly (constructing an
 MNASystem and calling stamp() by hand) rather than through the solver,
@@ -11,7 +12,7 @@ import numpy as np
 import pytest
 
 from minispice.circuit import Circuit
-from minispice.components import Resistor, VoltageSource
+from minispice.components import CurrentSource, Resistor, VoltageSource
 from minispice.solver.mna import MNASystem
 
 
@@ -170,3 +171,90 @@ def test_full_voltage_divider_augmented_system_solves_correctly():
     assert solution[in_idx] == pytest.approx(5.0)
     assert solution[out_idx] == pytest.approx(2.5)
     assert solution[branch] == pytest.approx(-0.0025)
+
+
+# ---------------------------------------------------------------------------
+# CurrentSource.stamp() / MNASystem.stamp_current_source()
+# ---------------------------------------------------------------------------
+
+
+def test_current_source_adds_no_matrix_rows():
+    """A current source needs no auxiliary unknown, unlike a voltage source."""
+    circuit = Circuit()
+    circuit.add_component(CurrentSource("I1", "a", "0", 0.001))
+    circuit.add_component(Resistor("R1", "a", "0", 1000.0))
+
+    system = MNASystem(circuit)
+
+    assert system.size == circuit.num_nodes == 1
+
+
+def test_current_source_into_ground_only_touches_pos_terminal():
+    circuit = Circuit()
+    i1 = CurrentSource("I1", "a", "0", 0.001)
+    circuit.add_component(i1)
+    system = MNASystem(circuit)
+
+    i1.stamp(system)
+
+    a = circuit.node_index("a")
+    assert system.z[a] == pytest.approx(-0.001)
+
+
+def test_current_source_from_ground_only_touches_neg_terminal():
+    circuit = Circuit()
+    i1 = CurrentSource("I1", "0", "a", 0.001)
+    circuit.add_component(i1)
+    system = MNASystem(circuit)
+
+    i1.stamp(system)
+
+    a = circuit.node_index("a")
+    assert system.z[a] == pytest.approx(0.001)
+
+
+def test_current_source_between_two_nodes_stamps_both_terminals():
+    circuit = Circuit()
+    i1 = CurrentSource("I1", "a", "b", 0.002)
+    circuit.add_component(i1)
+    system = MNASystem(circuit)
+
+    i1.stamp(system)
+
+    a, b = circuit.node_index("a"), circuit.node_index("b")
+    assert system.z[a] == pytest.approx(-0.002)
+    assert system.z[b] == pytest.approx(0.002)
+
+
+def test_current_source_stamp_does_not_touch_matrix_a():
+    circuit = Circuit()
+    i1 = CurrentSource("I1", "a", "b", 0.002)
+    circuit.add_component(i1)
+    system = MNASystem(circuit)
+
+    i1.stamp(system)
+
+    assert system.A == pytest.approx(np.zeros((circuit.num_nodes, circuit.num_nodes)))
+
+
+def test_current_source_into_resistor_matches_ohms_law():
+    """I1 (1mA) injected into node "a", drained by R1 (1k) to ground.
+
+    Current is defined flowing node_pos->node_neg through the source
+    (see CurrentSource docstring); with node_pos="0" and node_neg="a",
+    that describes 1mA flowing from ground into node "a". By Ohm's law
+    the resulting node voltage should be V = I * R = 0.001 * 1000 = 1V.
+    """
+    circuit = Circuit()
+    i1 = CurrentSource("I1", "0", "a", 0.001)
+    r1 = Resistor("R1", "a", "0", 1000.0)
+    circuit.add_component(i1)
+    circuit.add_component(r1)
+
+    system = MNASystem(circuit)
+    i1.stamp(system)
+    r1.stamp(system)
+
+    solution = np.linalg.solve(system.A, system.z)
+    a = circuit.node_index("a")
+    assert solution[a] == pytest.approx(1.0)

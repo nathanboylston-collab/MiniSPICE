@@ -177,6 +177,36 @@ class MNASystem:
 
         self.z[branch] += voltage
 
+    def stamp_current_source(self, node_pos: str, node_neg: str, current: float) -> None:
+        """Add an independent current source's contribution to the system.
+
+        Unlike a voltage source, a current source's current is already
+        known -- it doesn't depend on any unknown node voltage, and it
+        needs no auxiliary branch-current unknown of its own. So there
+        is nothing to add to ``A``; the whole contribution lands on the
+        right-hand side ``z``.
+
+        By convention (matching the sign used for a resistor's or
+        voltage source's branch current), ``current`` flows from
+        ``node_pos`` to ``node_neg`` through the source: that is
+        current *leaving* ``node_pos`` and current *entering*
+        ``node_neg``. KCL says currents leaving a node sum to zero, so
+        moving this known term to the other side of the equation gives:
+
+            z[pos] -= current
+            z[neg] += current
+
+        As with the other stamps, a terminal tied to ground has no
+        row at all, so its entry is simply skipped.
+        """
+        idx_pos = self._unknown_index(node_pos)
+        idx_neg = self._unknown_index(node_neg)
+
+        if idx_pos is not None:
+            self.z[idx_pos] -= current
+        if idx_neg is not None:
+            self.z[idx_neg] += current
+
 
 class MNASolver:
     """Builds and solves the MNA system for a given circuit.
