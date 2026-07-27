@@ -33,6 +33,7 @@ minispice/
         mna.py       MNASystem/MNASolution/MNASolver (matrix stamping + DC solve)
         results.py   SimulationResult (engineering-notation formatting)
     __main__.py      `python -m minispice <file>` CLI
+    web/             Optional browser UI (`python -m minispice.web`)
 tests/               pytest test suite
 ```
 
@@ -75,6 +76,24 @@ current component types, but reserved for future devices like diodes),
 or a circuit that can't be solved (e.g. a floating node with no path to
 ground).
 
+## Browser UI
+
+An optional local web UI wraps the same parser/solver pipeline with a
+netlist editor, an auto-laid-out circuit diagram, and live results:
+
+```bash
+pip install -e ".[web]"
+python -m minispice.web
+```
+
+Then open <http://127.0.0.1:5000>. Edit the netlist and click
+**Simulate** (or press Ctrl/Cmd+Enter) to re-run it; the diagram and
+results update in place, and parse/solve errors show inline instead of
+a stack trace. The dev server runs with auto-reload enabled, so as the
+simulator itself keeps changing, the next "Simulate" click picks up the
+latest code automatically -- no manual restart needed. It's a local
+development tool (binds to localhost only), not meant to be deployed.
+
 ## Example netlist
 
 ```
@@ -116,6 +135,7 @@ pytest
       sources (capacitors/inductors stamped as their DC limiting cases)
 - [x] DC operating point solve
 - [x] Command-line interface
+- [x] Browser UI (netlist editor + circuit diagram + live results)
 - [ ] Transient analysis
 - [ ] AC small-signal analysis
 - [ ] Nonlinear devices (diodes, transistors)

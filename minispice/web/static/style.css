@@ -1,0 +1,245 @@
+:root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2e38;
+    --text: #e6e8ec;
+    --muted: #9198a8;
+    --accent: #5b8cff;
+    --accent-text: #ffffff;
+    --danger: #ff6b6b;
+    --danger-bg: #3a1f22;
+    --node: #5b8cff;
+    --node-ground: #9198a8;
+    --edge: #7d8496;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --bg: #f5f6f8;
+        --panel: #ffffff;
+        --border: #d8dbe2;
+        --text: #1a1d24;
+        --muted: #5b6270;
+        --accent: #2f5fe0;
+        --accent-text: #ffffff;
+        --danger: #b3261e;
+        --danger-bg: #fbe9e7;
+        --node: #2f5fe0;
+        --node-ground: #5b6270;
+        --edge: #626a7a;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+header {
+    padding: 1.25rem 1.5rem 0.5rem;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.subtitle {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1rem 1.5rem 1.5rem;
+}
+
+section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.editor-panel {
+    grid-column: 1 / -1;
+}
+
+h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+textarea#netlist {
+    width: 100%;
+    min-height: 140px;
+    resize: vertical;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.editor-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+button#simulate-btn {
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 1.1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+button#simulate-btn:active {
+    transform: translateY(1px);
+}
+
+.status {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.error {
+    margin-top: 0.75rem;
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+}
+
+svg#diagram {
+    width: 100%;
+    height: 360px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.node-circle {
+    fill: var(--node);
+    stroke: var(--panel);
+    stroke-width: 2;
+}
+
+.node-circle.ground {
+    fill: var(--node-ground);
+}
+
+.node-label {
+    fill: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    text-anchor: middle;
+}
+
+.lead-line {
+    stroke: var(--edge);
+    stroke-width: 2;
+}
+
+.component-body {
+    fill: none;
+    stroke: var(--edge);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.source-circle {
+    fill: var(--bg);
+    stroke: var(--edge);
+    stroke-width: 2;
+}
+
+.source-sign {
+    fill: var(--edge);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+.edge-label {
+    fill: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    text-anchor: middle;
+}
+
+.results-panel table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.results-panel table:last-child {
+    margin-bottom: 0;
+}
+
+.results-panel caption {
+    text-align: left;
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-bottom: 0.35rem;
+}
+
+.results-panel th,
+.results-panel td {
+    text-align: left;
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.results-panel td.value {
+    font-family: var(--mono);
+    text-align: right;
+}
+
+.results-panel .empty {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+@media (max-width: 860px) {
+    main {
+        grid-template-columns: 1fr;
+    }
+}

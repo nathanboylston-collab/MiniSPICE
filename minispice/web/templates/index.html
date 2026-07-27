@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MiniSPICE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>MiniSPICE</h1>
+        <p class="subtitle">Edit a netlist, simulate its DC operating point, and see the circuit.</p>
+    </header>
+
+    <main>
+        <section class="editor-panel">
+            <label for="netlist">Netlist</label>
+            <textarea id="netlist" spellcheck="false">{{ default_netlist }}</textarea>
+            <div class="editor-actions">
+                <button id="simulate-btn">Simulate</button>
+                <span id="status" class="status"></span>
+            </div>
+            <div id="error" class="error" hidden></div>
+        </section>
+
+        <section class="diagram-panel">
+            <h2>Circuit</h2>
+            <svg id="diagram" viewBox="0 0 600 420" preserveAspectRatio="xMidYMid meet"></svg>
+        </section>
+
+        <section class="results-panel">
+            <h2>Results</h2>
+            <div id="results"></div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -17,9 +17,15 @@ dependencies = [
 dev = [
     "pytest>=7.4",
 ]
+web = [
+    "flask>=3.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["minispice*"]
+
+[tool.setuptools.package-data]
+"minispice.web" = ["templates/*", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
