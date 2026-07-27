@@ -238,6 +238,103 @@ svg#diagram {
     font-size: 0.85rem;
 }
 
+/* Matrix viewer -- a modal "window" floating above the page. */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-overlay[hidden] {
+    display: none;
+}
+
+.modal-window {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: min(92vw, 900px);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.modal-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.25rem;
+}
+
+.modal-body {
+    padding: 1rem 1.1rem;
+    overflow: auto;
+}
+
+.matrix-block {
+    margin-bottom: 1.25rem;
+}
+
+.matrix-block:last-child {
+    margin-bottom: 0;
+}
+
+.matrix-block h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+table.matrix-table {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+}
+
+table.matrix-table th,
+table.matrix-table td {
+    border: 1px solid var(--border);
+    padding: 0.3rem 0.55rem;
+    text-align: right;
+    white-space: nowrap;
+}
+
+table.matrix-table th {
+    color: var(--muted);
+    font-weight: 600;
+    background: var(--bg);
+}
+
+table.matrix-table th.corner {
+    background: transparent;
+    border: none;
+}
+
+.modal-body .empty {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
 @media (max-width: 860px) {
     main {
         grid-template-columns: 1fr;

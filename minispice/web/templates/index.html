@@ -18,6 +18,7 @@
             <textarea id="netlist" spellcheck="false">{{ default_netlist }}</textarea>
             <div class="editor-actions">
                 <button id="simulate-btn">Simulate</button>
+                <button id="matrix-btn" type="button">Matrix Viewer</button>
                 <span id="status" class="status"></span>
             </div>
             <div id="error" class="error" hidden></div>
@@ -33,6 +34,16 @@
             <div id="results"></div>
         </section>
     </main>
+
+    <div id="matrix-modal" class="modal-overlay" hidden>
+        <div class="modal-window" role="dialog" aria-modal="true" aria-labelledby="matrix-title">
+            <div class="modal-titlebar">
+                <span id="matrix-title">MNA System Matrix</span>
+                <button id="matrix-close-btn" class="modal-close" type="button" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body" id="matrix-body"></div>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

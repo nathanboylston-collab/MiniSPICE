@@ -118,6 +118,23 @@ class MNASystem:
         """
         return [c.name for c in self.circuit.components if isinstance(c, Inductor)]
 
+    def unknown_labels(self) -> List[str]:
+        """A human-readable name for each row/column of ``A`` (and each
+        entry of ``z``/a solved ``x``), in the exact order they appear
+        in the unknown vector.
+
+        Node-voltage unknowns are labeled ``"V(<node>)"``; voltage-source
+        and inductor branch-current unknowns are labeled ``"I(<name>)"``.
+        Meant for displaying the raw linear system to a human (e.g. a
+        matrix-viewer UI) without them needing to know the index layout.
+        """
+        node_names = sorted(
+            (node for node in self.circuit.list_nodes() if self.circuit.node_index(node) >= 0),
+            key=self.circuit.node_index,
+        )
+        branch_names = sorted(self._branch_index, key=self._branch_index.get)
+        return [f"V({name})" for name in node_names] + [f"I({name})" for name in branch_names]
+
     def _unknown_index(self, node: str) -> Optional[int]:
         """Translate a node name into a matrix row/column, or ``None``.
 
@@ -289,6 +306,35 @@ class MNASolution:
         """Equivalent to ``source_currents[source_name]``."""
         return self.source_currents[source_name]
 
+    @classmethod
+    def from_system(cls, system: "MNASystem", x: np.ndarray) -> "MNASolution":
+        """Unpack a raw solved unknown vector ``x`` for ``system`` into
+        a name-keyed ``MNASolution``.
+
+        Factored out of ``MNASolver.solve()`` so anything else that
+        already has an ``MNASystem`` and a solved ``x`` -- e.g. a caller
+        that also wants direct access to ``system.A``/``system.z``, such
+        as a matrix-viewer UI -- can reuse this instead of re-deriving
+        the same node/branch lookups.
+        """
+        circuit = system.circuit
+        node_voltages = {
+            node: 0.0 if circuit.node_index(node) < 0 else float(x[circuit.node_index(node)])
+            for node in circuit.list_nodes()
+        }
+        source_currents = {
+            name: float(x[system.branch_index(name)]) for name in system.voltage_source_names
+        }
+        inductor_currents = {
+            name: float(x[system.branch_index(name)]) for name in system.inductor_names
+        }
+        return cls(
+            node_voltages=node_voltages,
+            source_currents=source_currents,
+            inductor_currents=inductor_currents,
+            raw=x,
+        )
+
 
 class MNASolver:
     """Builds and solves the MNA system for a given circuit.
@@ -335,20 +381,4 @@ class MNASolver:
         """
         system = self.build_system()
         x = np.linalg.solve(system.A, system.z)
-
-        node_voltages = {
-            node: 0.0 if self.circuit.node_index(node) < 0 else float(x[self.circuit.node_index(node)])
-            for node in self.circuit.list_nodes()
-        }
-        source_currents = {
-            name: float(x[system.branch_index(name)]) for name in system.voltage_source_names
-        }
-        inductor_currents = {
-            name: float(x[system.branch_index(name)]) for name in system.inductor_names
-        }
-        return MNASolution(
-            node_voltages=node_voltages,
-            source_currents=source_currents,
-            inductor_currents=inductor_currents,
-            raw=x,
-        )
+        return MNASolution.from_system(system, x)

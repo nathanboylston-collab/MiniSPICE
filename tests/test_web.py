@@ -4,6 +4,7 @@ These use Flask's test client, so no real server/network is involved.
 Requires the 'web' extra (flask) to be installed.
 """
 
+import numpy as np
 import pytest
 
 flask = pytest.importorskip("flask")
@@ -50,6 +51,25 @@ def test_simulate_voltage_divider_returns_expected_circuit_and_results(client):
     assert results["resistor_power"]["R1"]["display"] == "6.25 mW"
     assert results["source_currents"]["V1"]["value"] == pytest.approx(-0.0025)
     assert results["inductor_currents"] == {}
+
+    matrix = data["matrix"]
+    assert matrix["labels"] == ["V(in)", "V(out)", "I(V1)"]
+    g = 1.0 / 1000.0
+    expected_A = np.array([[g, -g, 1.0], [-g, 2 * g, 0.0], [1.0, 0.0, 0.0]])
+    assert np.array(matrix["A"]) == pytest.approx(expected_A)
+    assert matrix["z"] == pytest.approx([0.0, 0.0, 5.0])
+    assert matrix["x"] == pytest.approx([5.0, 2.5, -0.0025])
+
+
+def test_simulate_matrix_omitted_when_circuit_is_unsolvable(client):
+    """No successful solve means no matrix -- the 'x' half of A x = z
+    was never computed, so there's nothing consistent to show.
+    """
+    response = client.post("/simulate", json={"netlist": "Floating\nR1 a b 1k\n"})
+
+    data = response.get_json()
+    assert data["ok"] is False
+    assert "matrix" not in data
 
 
 def test_simulate_reports_parse_errors_without_500(client):

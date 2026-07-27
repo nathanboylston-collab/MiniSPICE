@@ -3,7 +3,7 @@ import pytest
 
 from minispice.circuit import Circuit
 from minispice.components import Capacitor, CurrentSource, Inductor, Resistor, VoltageSource
-from minispice.solver import MNASolver
+from minispice.solver import MNASolution, MNASolver
 
 
 def test_build_system_on_empty_circuit_returns_zero_sized_system():
@@ -109,6 +109,49 @@ def test_build_system_inductor_reserves_a_branch_row_like_a_voltage_source():
     assert system.size == 2
     assert system.branch_index("L1") == 1
     assert system.inductor_names == ["L1"]
+
+
+def test_unknown_labels_match_the_voltage_divider_layout():
+    circuit = Circuit(title="Voltage Divider")
+    circuit.add_component(VoltageSource("V1", "in", "0", 5.0))
+    circuit.add_component(Resistor("R1", "in", "out", 1000.0))
+    circuit.add_component(Resistor("R2", "out", "0", 1000.0))
+
+    system = MNASolver(circuit).build_system()
+
+    # Node voltages first (in index order), then branch currents.
+    assert system.unknown_labels() == ["V(in)", "V(out)", "I(V1)"]
+
+
+def test_unknown_labels_include_inductor_branches():
+    circuit = Circuit()
+    circuit.add_component(VoltageSource("V1", "a", "0", 5.0))
+    circuit.add_component(Inductor("L1", "a", "b", 1e-3))
+    circuit.add_component(Resistor("R1", "b", "0", 1000.0))
+
+    system = MNASolver(circuit).build_system()
+
+    assert system.unknown_labels() == ["V(a)", "V(b)", "I(V1)", "I(L1)"]
+
+
+def test_mna_solution_from_system_matches_solve():
+    """MNASolver.solve() is now just build_system() + np.linalg.solve()
+    + MNASolution.from_system() -- confirm that composition gives the
+    exact same result as calling solve() directly.
+    """
+    circuit = Circuit(title="Voltage Divider")
+    circuit.add_component(VoltageSource("V1", "in", "0", 5.0))
+    circuit.add_component(Resistor("R1", "in", "out", 1000.0))
+    circuit.add_component(Resistor("R2", "out", "0", 1000.0))
+
+    system = MNASolver(circuit).build_system()
+    x = np.linalg.solve(system.A, system.z)
+    solution = MNASolution.from_system(system, x)
+
+    expected = MNASolver(circuit).solve()
+    assert solution.node_voltages == pytest.approx(expected.node_voltages)
+    assert solution.source_currents == pytest.approx(expected.source_currents)
+    assert solution.inductor_currents == pytest.approx(expected.inductor_currents)
 
 
 def test_solve_on_empty_circuit_returns_ground_only_solution():

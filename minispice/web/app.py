@@ -22,7 +22,7 @@ from minispice.components import (
     VoltageSource,
 )
 from minispice.parser import SpiceParseError, SpiceParser
-from minispice.solver import MNASolver, SimulationResult, format_engineering
+from minispice.solver import MNASolution, MNASolver, MNASystem, SimulationResult, format_engineering
 
 DEFAULT_NETLIST = """\
 Voltage Divider
@@ -64,7 +64,7 @@ def create_app() -> Flask:
             return jsonify(ok=False, error=f"Error parsing netlist: {exc}")
 
         try:
-            solution = MNASolver(circuit).solve()
+            system = MNASolver(circuit).build_system()
         except NotImplementedError:
             return jsonify(
                 ok=False,
@@ -73,6 +73,9 @@ def create_app() -> Flask:
                     "yet for DC analysis."
                 ),
             )
+
+        try:
+            x = np.linalg.solve(system.A, system.z)
         except np.linalg.LinAlgError:
             return jsonify(
                 ok=False,
@@ -82,8 +85,14 @@ def create_app() -> Flask:
                 ),
             )
 
+        solution = MNASolution.from_system(system, x)
         result = SimulationResult(circuit=circuit, solution=solution)
-        return jsonify(ok=True, circuit=_circuit_json(circuit), results=_results_json(result))
+        return jsonify(
+            ok=True,
+            circuit=_circuit_json(circuit),
+            results=_results_json(result),
+            matrix=_matrix_json(system, x),
+        )
 
     return app
 
@@ -124,4 +133,17 @@ def _results_json(result: SimulationResult) -> Dict[str, Any]:
         "resistor_power": _named_values_json(result.resistor_power, "W"),
         "source_currents": _named_values_json(result.solution.source_currents, "A"),
         "inductor_currents": _named_values_json(result.solution.inductor_currents, "A"),
+    }
+
+
+def _matrix_json(system: MNASystem, x: np.ndarray) -> Dict[str, Any]:
+    """The raw MNA linear system (A, z) plus its solution (x), labeled
+    by unknown name so a matrix-viewer UI can show a human-readable
+    "V(in)" / "I(V1)" row/column instead of a bare index.
+    """
+    return {
+        "labels": system.unknown_labels(),
+        "A": system.A.tolist(),
+        "z": system.z.tolist(),
+        "x": x.tolist(),
     }

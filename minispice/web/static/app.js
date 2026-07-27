@@ -14,6 +14,15 @@ const statusEl = document.getElementById("status");
 const errorEl = document.getElementById("error");
 const diagramEl = document.getElementById("diagram");
 const resultsEl = document.getElementById("results");
+const matrixBtn = document.getElementById("matrix-btn");
+const matrixModal = document.getElementById("matrix-modal");
+const matrixCloseBtn = document.getElementById("matrix-close-btn");
+const matrixBodyEl = document.getElementById("matrix-body");
+
+// The most recent successful simulation's matrix payload, so the modal
+// can be (re-)rendered both when it's opened and, if it's already open,
+// the moment a new "Simulate" click produces fresh data.
+let latestMatrix = null;
 
 simulateBtn.addEventListener("click", simulate);
 document.addEventListener("DOMContentLoaded", simulate);
@@ -23,6 +32,24 @@ netlistEl.addEventListener("keydown", (event) => {
         simulate();
     }
 });
+
+matrixBtn.addEventListener("click", openMatrixModal);
+matrixCloseBtn.addEventListener("click", closeMatrixModal);
+matrixModal.addEventListener("click", (event) => {
+    if (event.target === matrixModal) closeMatrixModal(); // click on the backdrop
+});
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !matrixModal.hidden) closeMatrixModal();
+});
+
+function openMatrixModal() {
+    renderMatrix(latestMatrix);
+    matrixModal.hidden = false;
+}
+
+function closeMatrixModal() {
+    matrixModal.hidden = true;
+}
 
 async function simulate() {
     setStatus("Simulating...");
@@ -40,6 +67,8 @@ async function simulate() {
             showError(data.error);
             clearDiagram();
             resultsEl.innerHTML = "";
+            latestMatrix = null;
+            if (!matrixModal.hidden) renderMatrix(latestMatrix);
             setStatus("Error");
             return;
         }
@@ -47,6 +76,8 @@ async function simulate() {
         hideError();
         renderDiagram(data.circuit);
         renderResults(data.results);
+        latestMatrix = data.matrix;
+        if (!matrixModal.hidden) renderMatrix(latestMatrix); // live-update while open
         setStatus(`OK — ${data.circuit.components.length} component(s), ${data.circuit.nodes.length} node(s)`);
     } catch (err) {
         showError(`Request failed: ${err}`);
@@ -436,4 +467,95 @@ function buildTable(caption, namedValues) {
 
     wrapper.appendChild(table);
     return wrapper;
+}
+
+// ---------------------------------------------------------------------------
+// Matrix viewer modal: the raw MNA system (A, z) and its solution (x)
+// ---------------------------------------------------------------------------
+
+function renderMatrix(matrix) {
+    matrixBodyEl.innerHTML = "";
+
+    if (!matrix) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Run a successful simulation first.";
+        matrixBodyEl.appendChild(empty);
+        return;
+    }
+
+    matrixBodyEl.appendChild(buildMatrixTable("A — conductance matrix", matrix.labels, matrix.A));
+    matrixBodyEl.appendChild(buildVectorTable("z — right-hand side", matrix.labels, matrix.z));
+    matrixBodyEl.appendChild(buildVectorTable("x — solved unknowns", matrix.labels, matrix.x));
+}
+
+/** Trim a float to a few significant figures for display, without unit conversion. */
+function formatMatrixValue(value) {
+    if (value === 0 || Object.is(value, -0)) return "0";
+    return Number(value.toPrecision(4)).toString();
+}
+
+function buildMatrixTable(title, labels, rows) {
+    const block = document.createElement("div");
+    block.className = "matrix-block";
+
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    block.appendChild(heading);
+
+    const table = document.createElement("table");
+    table.className = "matrix-table";
+
+    const headRow = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.className = "corner";
+    headRow.appendChild(corner);
+    labels.forEach((label) => {
+        const th = document.createElement("th");
+        th.textContent = label;
+        headRow.appendChild(th);
+    });
+    table.appendChild(headRow);
+
+    rows.forEach((row, i) => {
+        const tr = document.createElement("tr");
+        const rowHeader = document.createElement("th");
+        rowHeader.textContent = labels[i];
+        tr.appendChild(rowHeader);
+        row.forEach((value) => {
+            const td = document.createElement("td");
+            td.textContent = formatMatrixValue(value);
+            tr.appendChild(td);
+        });
+        table.appendChild(tr);
+    });
+
+    block.appendChild(table);
+    return block;
+}
+
+function buildVectorTable(title, labels, values) {
+    const block = document.createElement("div");
+    block.className = "matrix-block";
+
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    block.appendChild(heading);
+
+    const table = document.createElement("table");
+    table.className = "matrix-table";
+
+    values.forEach((value, i) => {
+        const tr = document.createElement("tr");
+        const th = document.createElement("th");
+        th.textContent = labels[i];
+        const td = document.createElement("td");
+        td.textContent = formatMatrixValue(value);
+        tr.appendChild(th);
+        tr.appendChild(td);
+        table.appendChild(tr);
+    });
+
+    block.appendChild(table);
+    return block;
 }
